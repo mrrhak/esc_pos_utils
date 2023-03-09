@@ -1,18 +1,19 @@
 /*
  * esc_pos_utils
  * Created by Andrey U.
- * 
+ *
  * Copyright (c) 2019-2020. All rights reserved.
  * See LICENSE for distribution and usage details.
  */
 
 import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
-import 'package:hex/hex.dart';
-import 'package:image/image.dart';
-import 'package:gbk_codec/gbk_codec.dart';
+
 import 'package:esc_pos_utils/esc_pos_utils.dart';
-import 'enums.dart';
+import 'package:gbk_codec/gbk_codec.dart';
+import 'package:hex/hex.dart';
+import 'package:image/image.dart' as img;
+
 import 'commands.dart';
 
 class Generator {
@@ -132,29 +133,36 @@ class Generator {
     return res;
   }
 
-  /// Extract slices of an image as equal-sized blobs of column-format data.
+  /// Extract slices of an img.Image as equal-sized blobs of column-format data.
   ///
-  /// [image] Image to extract from
+  /// [image] img.Image to extract from
   /// [lineHeight] Printed line height in dots
-  List<List<int>> _toColumnFormat(Image imgSrc, int lineHeight) {
-    final Image image = Image.from(imgSrc); // make a copy
+  List<List<int>> _toColumnFormat(img.Image imgSrc, int lineHeight) {
+    final img.Image image = img.Image.from(imgSrc); // make a copy
 
     // Determine new width: closest integer that is divisible by lineHeight
     final int widthPx = (image.width + lineHeight) - (image.width % lineHeight);
     final int heightPx = image.height;
 
     // Create a black bottom layer
-    final biggerImage = copyResize(image, width: widthPx, height: heightPx);
-    fill(biggerImage, 0);
-    // Insert source image into bigger one
-    drawImage(biggerImage, image, dstX: 0, dstY: 0);
+    final biggerImage = img.copyResize(image, width: widthPx, height: heightPx);
+    img.fill(biggerImage, color: img.ColorInt8(0));
+    // Insert source img.Image into bigger one
+    // img.drawImage(biggerImage, image, dstX: 0, dstY: 0);
+    img.compositeImage(biggerImage, image, dstX: 0, dstY: 0);
 
     int left = 0;
     final List<List<int>> blobs = [];
 
     while (left < widthPx) {
-      final Image slice = copyCrop(biggerImage, left, 0, lineHeight, heightPx);
-      final Uint8List bytes = slice.getBytes(format: Format.luminance);
+      final img.Image slice = img.copyCrop(
+        biggerImage,
+        x: left,
+        y: 0,
+        height: lineHeight,
+        width: heightPx,
+      );
+      final Uint8List bytes = slice.getBytes(order: img.ChannelOrder.rgba);
       blobs.add(bytes);
       left += lineHeight;
     }
@@ -162,18 +170,18 @@ class Generator {
     return blobs;
   }
 
-  /// Image rasterization
-  List<int> _toRasterFormat(Image imgSrc) {
-    final Image image = Image.from(imgSrc); // make a copy
+  /// img.Image rasterization
+  List<int> _toRasterFormat(img.Image imgSrc) {
+    final img.Image image = img.Image.from(imgSrc); // make a copy
     final int widthPx = image.width;
     final int heightPx = image.height;
 
-    grayscale(image);
-    invert(image);
+    img.grayscale(image);
+    img.invert(image);
 
     // R/G/B channels are same -> keep only one channel
     final List<int> oneChannelBytes = [];
-    final List<int> buffer = image.getBytes(format: Format.rgba);
+    final List<int> buffer = image.getBytes(order: img.ChannelOrder.rgba);
     for (int i = 0; i < buffer.length; i += 4) {
       oneChannelBytes.add(buffer[i]);
     }
@@ -564,21 +572,21 @@ class Generator {
     return bytes;
   }
 
-  /// Print an image using (ESC *) command
+  /// Print an img.Image using (ESC *) command
   ///
   /// [image] is an instanse of class from [Image library](https://pub.dev/packages/image)
-  List<int> image(Image imgSrc, {PosAlign align = PosAlign.center}) {
+  List<int> image(img.Image imgSrc, {PosAlign align = PosAlign.center}) {
     List<int> bytes = [];
-    // Image alignment
+    // img.Image alignment
     bytes += setStyles(PosStyles().copyWith(align: align));
 
-    final Image image = Image.from(imgSrc); // make a copy
+    final img.Image image = img.Image.from(imgSrc); // make a copy
     const bool highDensityHorizontal = true;
     const bool highDensityVertical = true;
 
-    invert(image);
-    flip(image, Flip.horizontal);
-    final Image imageRotated = copyRotate(image, 270);
+    img.invert(image);
+    img.flip(image, direction: img.FlipDirection.horizontal);
+    final img.Image imageRotated = img.copyRotate(image, angle: 270);
 
     const int lineHeight = highDensityVertical ? 3 : 1;
     final List<List<int>> blobs = _toColumnFormat(imageRotated, lineHeight * 8);
@@ -611,18 +619,18 @@ class Generator {
     return bytes;
   }
 
-  /// Print an image using (GS v 0) obsolete command
+  /// Print an img.Image using (GS v 0) obsolete command
   ///
   /// [image] is an instanse of class from [Image library](https://pub.dev/packages/image)
   List<int> imageRaster(
-    Image image, {
+    img.Image image, {
     PosAlign align = PosAlign.center,
     bool highDensityHorizontal = true,
     bool highDensityVertical = true,
     PosImageFn imageFn = PosImageFn.bitImageRaster,
   }) {
     List<int> bytes = [];
-    // Image alignment
+    // img.Image alignment
     bytes += setStyles(PosStyles().copyWith(align: align));
 
     final int widthPx = image.width;
