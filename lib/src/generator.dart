@@ -588,7 +588,7 @@ class Generator {
     img.flip(image, direction: img.FlipDirection.horizontal);
     final img.Image imageRotated = img.copyRotate(image, angle: 270);
 
-    const int lineHeight = highDensityVertical ? 3 : 1;
+    const int lineHeight = 3;
     final List<List<int>> blobs = _toColumnFormat(imageRotated, lineHeight * 8);
 
     // Compress according to line density
